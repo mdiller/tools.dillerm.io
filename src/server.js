@@ -16,8 +16,7 @@ const LIB_PROJECT_NAME = "dillerm-webutils";
 
 const PROJECTS = [];
 const PROJECT_INFOS = {};
-
-// fs.rmSync(PROJECTS_DIR, { recursive: true });
+const SERVED_PROJECTS = [];
 
 function shellExecSync(command, dir) {
 	const cd_result = shell.cd(dir);
@@ -76,7 +75,7 @@ async function updateProjectInfo(project) {
 
 // takes the given project and updates both its stored information and its to-be-hosted files
 async function updateProject(project) {
-	var invalid_pattern = /[^0-1a-zA-Z\-_.]/;
+	var invalid_pattern = /[^0-1a-zA-Z-_.]/;
 	if (project.match(invalid_pattern)) {
 		console.error(`invalid project name: ${project}`);
 		return;
@@ -103,7 +102,8 @@ async function updateProject(project) {
 		}
 	}
 
-	// ONLY DO NEXT STEPS IF PACKAGE.JSON EXISTS
+
+	// TODO: ADD LOGIC HERE TO ONLY DO INSTALL N BUILD IF THE GIT VERSION CHANGED
 	if (fs.existsSync(project_dir + "/package.json")) {
 		console.log(`] installing packages...`);
 		if (!shellExecSync(`npm install --silent`, project_dir)) {
@@ -113,6 +113,14 @@ async function updateProject(project) {
 		console.log(`] building...`);
 		if (!shellExecSync(`npm run build --silent`, project_dir)) {
 			return null; // nothing more to do if this fails
+		}
+
+		// TODO: add logic here for replacing ?version=dev with ?version=libversion. also do this when updating our lib.
+
+		if (!SERVED_PROJECTS.includes(project)) {
+			console.log(`] serving...`);
+			app.use(`/${project}`, express.static(`${PROJECTS_DIR}/${project}/build`));
+			SERVED_PROJECTS.push(project);
 		}
 	}
 	else {
@@ -141,18 +149,54 @@ app.use(asyncHandler(async(req, res, next) => {
 }));
 
 // ENDPOINTS
-// endpoint: manual repo update/add? (see how much info we get in the update hook)
-// endpoint: github repo update hook
-// endpoint: main html homepage
-// endpoint: child tools pages
-app.use("/gitHook/:project", asyncHandler(async (req, res) => {
+app.get("/githook/:project", asyncHandler(async (req, res) => {
 	await updateProject(req.params.project);
+
+	console.dir(req.body);
 	
 	res.status(200);
 	res.setHeader("Content-Type", "text/html");
 	res.send("Done!");
 }));
 
+app.get("/lib/:filename", asyncHandler(async (req, res) => {
+	// probably move this to be handled at top of script in future
+	var filename = req.params.filename;
+	var invalid_pattern = /[^0-1a-zA-Z-_.]/;
+	if (filename.match(invalid_pattern)) {
+		res.status(404);
+		res.setHeader("Content-Type", "text/html");
+		res.send(`invalid lib file name: ${filename}`);
+		return;
+	}
+
+	var libpath = `${PROJECTS_DIR}/${LIB_PROJECT_NAME}`;
+	
+	// TODO: add a thing here for if theres a ?version=dev to do a different path
+	var filepath = `${libpath}/build/${filename}`;
+
+	if (!fs.existsSync(filepath)) {
+		res.status(404);
+		res.setHeader("Content-Type", "text/html");
+		console.error(filepath);
+		res.send(`file '${filename}' not found!`);
+		return;
+	}
+	res.status(200);
+	res.sendFile(filepath);
+}));
+
+app.get("/", asyncHandler(async (req, res) => {
+	// probably move this to be handled at top of script in future
+	var html = fs.readFileSync(__dirname + "/index.html", "utf8");
+
+	// template fill
+
+
+	res.status(200);
+	res.setHeader("Content-Type", "text/html");
+	res.send(html);
+}));
 
 
 // error handler
