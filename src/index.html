@@ -4,26 +4,50 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>Web Tools</title>
-	<link href="/lib/dillerm.css" rel="stylesheet" type="text/css">
+	<link href="https://tools.dillerm.io/lib/dillerm.css?version=dev" rel="stylesheet" type="text/css">
 </head>
-<script src="/lib/dillerm.umd.js"></script>
+<!-- <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script> -->
+<script src="https://tools.dillerm.io/lib/dillerm.umd.js?version=dev"></script>
 
 <body>
 <div id="navbar"></div>
-<div id="container" class="dillerm dillerm-container">
-  dillerm tools stuff here
+<div id="content" class="dillerm dillerm-container">
+	<h1>Webapps</h1>
+	<ul>
+		<li v-for="project in projects">
+			<a :href="project.link">{{project.name}}</a>
+		</li>
+	</ul>
 </div>
 
 <script>
-
-console.log("some script stuff");
-
 DillermWebUtils.init("#navbar", {
 	github_url: "https://github.com/mdiller/tools.dillerm.io"
 });
 
+// PROJECTS_LIST_START
+var projects = [ { "name": 123, "link": "https://tools.dillerm.io" } ];
+// PROJECTS_LIST_END
 
+const app = DillermWebUtils.createVueApp({
+	data() {
+		return { 
+			projects: projects,
+			test: "hello"
+		}
+	},
+});
+app.mount("#content");
 </script>
+
+<style>
+
+#content {
+	text-align: center;
+}
+
+</style>
+
 
 </body>
 </html>

@@ -1,0 +1,20 @@
+networks:
+  default:
+    external:
+      name: traefik
+
+services:
+  toolsdillermio:
+    restart: unless-stopped
+    container_name: tools.dillerm.io
+    build: .
+    volumes:
+      - ./projects:/usr/src/app/projects
+      - ./libdev:/usr/src/app/libdev
+    expose:
+      - 80
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dillermtools.rule=Host(`tools.dillerm.io`)
+      - traefik.http.routers.dillermtools.tls.certresolver=le
+      - traefik.http.routers.dillermtools.entrypoints=websecure

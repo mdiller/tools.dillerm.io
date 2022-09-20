@@ -8,16 +8,42 @@ const shell = require("shelljs");
 // promisified fs stuff
 const fs_readdir = util.promisify(fs.readdir);
 
-const LISTEN_PORT = 3000;
+var DEBUG = false;
+var LISTEN_PORT = 3000;
+if (process.env.LISTEN_PORT && !isNaN(process.env.LISTEN_PORT)) {
+	LISTEN_PORT = parseInt(process.env.LISTEN_PORT)
+}
+console.log(`] hosting on port ${LISTEN_PORT}`);
+var LIB_PROJECT_VERSION = null; // gets set right away on startup
 const GITHUB_API_ROOT = "https://api.github.com";
 const GITHUB_ACCOUNT = "mdiller";
 const PROJECTS_DIR = path.resolve("./projects");
+const LIB_DEV_DIR = path.resolve("./libdev");
 const LIB_PROJECT_NAME = "dillerm-webutils";
 
 const PROJECTS = [];
 const PROJECT_INFOS = {};
 const SERVED_PROJECTS = [];
 
+// Gets the hash of the last commit for the repository at the given directory
+function getGitHash(dir) {
+	const cd_result = shell.cd(dir);
+	if (cd_result.code != 0) {
+		console.error(`exit code ${cd_result.code}! (during cd)`);
+		return false;
+	}
+	const command = "git rev-parse --short HEAD"
+	const result = shell.exec(command);
+	if (result.code != 0) {
+		console.log(result.stdout);
+		console.log(result.stderr);
+		console.error(`exit code ${result.code}!`);
+		return false;
+	}
+	return result.stdout.trim();
+}
+
+// Executes a shell command at the given directory
 function shellExecSync(command, dir) {
 	const cd_result = shell.cd(dir);
 	if (cd_result.code != 0) {
@@ -39,7 +65,7 @@ function shellExecSync(command, dir) {
 })();
 
 async function startup() {
-	console.log("] starting up...");
+	console.log("> starting up...");
 	if (!fs.existsSync(PROJECTS_DIR)) {
 		fs.mkdirSync(PROJECTS_DIR);
 	}
@@ -59,6 +85,30 @@ async function startup() {
 	console.log("] startup complete!");
 }
 
+
+// updates the library version for all html files in the project's build directory
+async function updateLibVersion(project) {
+	const target_dir = `${PROJECTS_DIR}/${project}/build`;
+	if (DEBUG) {
+		return;
+	}
+	if (fs.existsSync(target_dir)) {
+		var files = fs.readdirSync(target_dir);
+		for (var i = 0; i < files.length; i++) {
+			var filename = path.join(target_dir, files[i]);
+			if (filename.endsWith(".html")) {
+				var pattern = /(https?:\/\/tools\.dillerm\.io\/lib\/[^?]+)\?version=([^"]+)/g;
+				var text = fs.readFileSync(filename, { encoding: "utf8" });
+				if (text.search(pattern)) {
+					console.log(`] Fixing version for ${filename}`);
+					text = text.replace(pattern, `$1?version=${LIB_PROJECT_VERSION}`);
+					fs.writeFileSync(filename, text);
+				}
+			}
+		};
+	}
+}
+
 // grabs repo info from github
 async function updateProjectInfo(project) {
 	// console.log(`] Querying info for: ${project}`);
@@ -71,6 +121,35 @@ async function updateProjectInfo(project) {
 	var body = await response.json();
 	PROJECT_INFOS[project] = body;
 	return body;
+}
+
+// builds the selected project
+async function updateProjectBuild(project) {
+	const project_dir = `${PROJECTS_DIR}/${project}`;
+	
+	if (fs.existsSync(project_dir + "/package.json")) {
+		console.log(`] installing packages...`);
+		if (!shellExecSync(`npm install --silent`, project_dir)) {
+			return null; // nothing more to do if this fails
+		}
+	
+		console.log(`] building...`);
+		if (!shellExecSync(`npm run build --silent`, project_dir)) {
+			return null; // nothing more to do if this fails
+		}
+
+		// TODO: add logic here for replacing ?version=dev with ?version=libversion. also do this when updating our lib.
+		await updateLibVersion(project);
+
+		if (!SERVED_PROJECTS.includes(project)) {
+			console.log(`] serving...`);
+			app.use(`/${project}`, express.static(`${PROJECTS_DIR}/${project}/build`));
+			SERVED_PROJECTS.push(project);
+		}
+	}
+	else {
+		console.warn("] No package.json exists for this repo");
+	}
 }
 
 // takes the given project and updates both its stored information and its to-be-hosted files
@@ -87,7 +166,8 @@ async function updateProject(project) {
 		return null; // nothing to do here
 	}
 
-	var project_dir = `${PROJECTS_DIR}/${project}`;
+	var git_hash_before = null;
+	const project_dir = `${PROJECTS_DIR}/${project}`;
 	if (!fs.existsSync(project_dir)) {
 		console.log(`] cloning...`);
 		var success = shellExecSync(`git clone ${project_info.clone_url} ${project}`, PROJECTS_DIR);
@@ -96,35 +176,30 @@ async function updateProject(project) {
 		}
 	}
 	else {
+		git_hash_before = getGitHash(project_dir);
 		console.log(`] pulling...`);
 		if (!shellExecSync(`git pull`, project_dir)) {
 			return null; // nothing more to do if this fails
 		}
 	}
+	var git_hash_after = getGitHash(project_dir);
+	var git_updated = git_hash_before != git_hash_after;
 
-
-	// TODO: ADD LOGIC HERE TO ONLY DO INSTALL N BUILD IF THE GIT VERSION CHANGED
-	if (fs.existsSync(project_dir + "/package.json")) {
-		console.log(`] installing packages...`);
-		if (!shellExecSync(`npm install --silent`, project_dir)) {
-			return null; // nothing more to do if this fails
-		}
-	
-		console.log(`] building...`);
-		if (!shellExecSync(`npm run build --silent`, project_dir)) {
-			return null; // nothing more to do if this fails
-		}
-
-		// TODO: add logic here for replacing ?version=dev with ?version=libversion. also do this when updating our lib.
-
-		if (!SERVED_PROJECTS.includes(project)) {
-			console.log(`] serving...`);
-			app.use(`/${project}`, express.static(`${PROJECTS_DIR}/${project}/build`));
-			SERVED_PROJECTS.push(project);
-		}
+	if (project == LIB_PROJECT_NAME) {
+		LIB_PROJECT_VERSION = git_hash_after;
 	}
-	else {
-		console.warn("] No package.json exists for this repo");
+
+	if (git_updated) {
+		await updateProjectBuild(project);
+		
+		if (project == LIB_PROJECT_NAME) {
+			console.log("] Update templates for all projects")
+			for (let i = 0; i < PROJECTS.length; i++) {
+				if (PROJECTS[i] != LIB_PROJECT_NAME) {
+					await updateLibVersion(PROJECTS[i]);
+				}
+			}
+		}
 	}
 
 	if (!PROJECTS.includes(project)) {
@@ -143,24 +218,22 @@ const asyncHandler = fn => (req, res, next) => {
         .resolve(fn(req, res, next))
         .catch(next);
 };
-app.use(asyncHandler(async(req, res, next) => {
+
+// Favicon
+app.use("/favicon.ico", express.static(path.join(__dirname, "assets", "favicon.ico")));
+
+app.use(express.json());
+app.post("/githook", asyncHandler(async (req, res) => {
 	console.log(`> ${req.originalUrl}`);
-	next();
-}));
+	var project = req.body.repository.name;
+	await updateProject(project);
 
-// ENDPOINTS
-app.get("/githook/:project", asyncHandler(async (req, res) => {
-	await updateProject(req.params.project);
-
-	console.dir(req.body);
-	
 	res.status(200);
 	res.setHeader("Content-Type", "text/html");
 	res.send("Done!");
 }));
 
 app.get("/lib/:filename", asyncHandler(async (req, res) => {
-	// probably move this to be handled at top of script in future
 	var filename = req.params.filename;
 	var invalid_pattern = /[^0-1a-zA-Z-_.]/;
 	if (filename.match(invalid_pattern)) {
@@ -170,10 +243,11 @@ app.get("/lib/:filename", asyncHandler(async (req, res) => {
 		return;
 	}
 
-	var libpath = `${PROJECTS_DIR}/${LIB_PROJECT_NAME}`;
-	
-	// TODO: add a thing here for if theres a ?version=dev to do a different path
-	var filepath = `${libpath}/build/${filename}`;
+	var filepath = `${PROJECTS_DIR}/${LIB_PROJECT_NAME}/build/${filename}`;
+
+	if (req.query.version == "dev") {
+		filepath = `${LIB_DEV_DIR}/${filename}`;
+	}
 
 	if (!fs.existsSync(filepath)) {
 		res.status(404);
@@ -189,8 +263,17 @@ app.get("/lib/:filename", asyncHandler(async (req, res) => {
 app.get("/", asyncHandler(async (req, res) => {
 	// probably move this to be handled at top of script in future
 	var html = fs.readFileSync(__dirname + "/index.html", "utf8");
-
-	// template fill
+	var pattern = /\/\/ PROJECTS_LIST_START\s+.*\s+\/\/ PROJECTS_LIST_END/m
+	if (html.search(pattern)) {
+		var projects = PROJECTS.map(project => {
+			return {
+				name: project,
+				link: `https://tools.dillerm.io/${project}`
+			}
+		});
+		var project_info_text = JSON.stringify(projects);
+		html = html.replace(pattern, `var projects = ${project_info_text}`)
+	}
 
 
 	res.status(200);
