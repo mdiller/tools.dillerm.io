@@ -25,6 +25,8 @@ const PROJECTS = [];
 const PROJECT_INFOS = {};
 const SERVED_PROJECTS = [];
 
+shell.config.silent = true;
+
 // Gets the hash of the last commit for the repository at the given directory
 function getGitHash(dir) {
 	const cd_result = shell.cd(dir);
@@ -140,12 +142,6 @@ async function updateProjectBuild(project) {
 
 		// TODO: add logic here for replacing ?version=dev with ?version=libversion. also do this when updating our lib.
 		await updateLibVersion(project);
-
-		if (!SERVED_PROJECTS.includes(project)) {
-			console.log(`] serving...`);
-			app.use(`/${project}`, express.static(`${PROJECTS_DIR}/${project}/build`));
-			SERVED_PROJECTS.push(project);
-		}
 	}
 	else {
 		console.warn("] No package.json exists for this repo");
@@ -200,6 +196,12 @@ async function updateProject(project) {
 				}
 			}
 		}
+	}
+	
+	if (!SERVED_PROJECTS.includes(project)) {
+		console.log(`] serving...`);
+		app.use(`/${project}`, express.static(`${PROJECTS_DIR}/${project}/build`));
+		SERVED_PROJECTS.push(project);
 	}
 
 	if (!PROJECTS.includes(project)) {
@@ -268,7 +270,7 @@ app.get("/", asyncHandler(async (req, res) => {
 		var projects = PROJECTS.map(project => {
 			return {
 				name: project,
-				link: `https://tools.dillerm.io/${project}`
+				link: PROJECT_INFOS[project].homepage || `https://tools.dillerm.io/${project}`
 			}
 		});
 		var project_info_text = JSON.stringify(projects);
