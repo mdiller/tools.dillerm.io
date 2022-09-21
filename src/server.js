@@ -27,6 +27,16 @@ const SERVED_PROJECTS = [];
 
 shell.config.silent = true;
 
+function localizeDate(date) { 
+	var date = new Date(date);
+
+	var day = date.getDate();
+	var month = date.toLocaleString("en-US", {month: "short"});
+	var year = 1900 + date.getYear();
+
+	return `${day}-${month}-${year}`;
+}
+
 // Gets the hash of the last commit for the repository at the given directory
 function getGitHash(dir) {
 	const cd_result = shell.cd(dir);
@@ -235,15 +245,19 @@ app.post("/githook", asyncHandler(async (req, res) => {
 	res.send("Done!");
 }));
 
-app.get("/lib/:filename", asyncHandler(async (req, res) => {
+app.get("/lib/:filename(*)", asyncHandler(async (req, res) => {
+	var approved_subpaths = [ "images" ];
 	var filename = req.params.filename;
-	var invalid_pattern = /[^0-1a-zA-Z-_.]/;
-	if (filename.match(invalid_pattern)) {
+	
+	var valid_pattern = new RegExp(`^((${approved_subpaths.join("|")})/)?[0-1a-zA-Z-_.]+$`);
+	if (!filename.match(valid_pattern)) {
 		res.status(404);
 		res.setHeader("Content-Type", "text/html");
-		res.send(`invalid lib file name: ${filename}`);
+		res.send(`<pre>invalid lib file name: ${filename}</pre>`);
 		return;
 	}
+
+	filename = filename;
 
 	var filepath = `${PROJECTS_DIR}/${LIB_PROJECT_NAME}/build/${filename}`;
 
@@ -255,7 +269,7 @@ app.get("/lib/:filename", asyncHandler(async (req, res) => {
 		res.status(404);
 		res.setHeader("Content-Type", "text/html");
 		console.error(filepath);
-		res.send(`file '${filename}' not found!`);
+		res.send(`<pre>file '${filename}' not found!</pre>`);
 		return;
 	}
 	res.status(200);
@@ -268,9 +282,15 @@ app.get("/", asyncHandler(async (req, res) => {
 	var pattern = /\/\/ PROJECTS_LIST_START\s+.*\s+\/\/ PROJECTS_LIST_END/m
 	if (html.search(pattern)) {
 		var projects = PROJECTS.map(project => {
+			var proj_info = PROJECT_INFOS[project];
 			return {
 				name: project,
-				link: PROJECT_INFOS[project].homepage || `https://tools.dillerm.io/${project}`
+				link: proj_info.homepage || `https://tools.dillerm.io/${project}`,
+				github_link: proj_info.html_url,
+				description: proj_info.description,
+				created_at: localizeDate(proj_info.created_at),
+				updated_at: localizeDate(proj_info.updated_at),
+				language: proj_info.language
 			}
 		});
 		var project_info_text = JSON.stringify(projects);
@@ -288,5 +308,5 @@ app.get("/", asyncHandler(async (req, res) => {
 app.use((err, req, res, next) => {
 	console.error(`Error on req: ${req.originalUrl}`);
 	console.error(err);
-	res.status(500).send("Oops, something broke. Check the logs.");
+	res.status(500).send("<pre>Oops, something broke. Check the logs.</pre>");
 });

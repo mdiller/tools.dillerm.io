@@ -11,13 +11,21 @@
 
 <body>
 <div id="navbar"></div>
-<div id="content" class="dillerm dillerm-container">
-	<h1>Webapps</h1>
-	<ul>
-		<li v-for="project in projects">
-			<a :href="project.link">{{project.name}}</a>
-		</li>
-	</ul>
+<div id="content" class="dillerm dillerm-content">
+	<h1>Web Tools</h1>
+	<div
+		class="project-box dillerm-card"
+		v-for="project in projects">
+		<a class="project-name" :href="project.link">{{project.name}}</a>
+		<p>{{ project.description }}</p>
+		<a class="github-link" :href="project.github_link">
+			<img src="https://tools.dillerm.io/lib/images/github.svg?version=dev" />
+		</a>
+		<span class="dillerm-card-footer">
+			<span>{{ project.language }}</span>
+			<span>Created: {{ project.created_at }}</span>
+		</span>
+	</div>
 </div>
 
 <script>
@@ -42,8 +50,35 @@ app.mount("#content");
 
 <style>
 
-#content {
-	text-align: center;
+h1 {
+	margin-top: 0px;
+	margin-bottom: 35px;
+}
+
+.project-box {
+	position: relative;
+}
+
+.project-name {
+	font-size: 18px;
+	font-weight: bold;
+}
+
+.project-box p {
+	margin: 20px 0px;
+}
+
+.github-link {
+	position: absolute;
+	right: 20px;
+	top: 20px;
+	width: 24px;
+	height: 24px;
+}
+
+.dillerm-card-footer > :last-child {
+	flex-grow: 1;
+	text-align: right;
 }
 
 </style>
