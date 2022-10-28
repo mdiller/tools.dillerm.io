@@ -98,6 +98,17 @@ async function startup() {
 }
 
 
+function libVersionTemplateFill(text) {
+	if (DEBUG) {
+		return text;
+	}
+	var pattern = /(https?:\/\/tools\.dillerm\.io\/lib\/[^?]+)\?version=([^"]+)/g;
+	if (text.search(pattern)) {
+		text = text.replace(pattern, `$1?version=${LIB_PROJECT_VERSION}`);
+	}
+	return text;
+}
+
 // updates the library version for all html files in the project's build directory
 async function updateLibVersion(project) {
 	const target_dir = `${PROJECTS_DIR}/${project}/build`;
@@ -109,12 +120,11 @@ async function updateLibVersion(project) {
 		for (var i = 0; i < files.length; i++) {
 			var filename = path.join(target_dir, files[i]);
 			if (filename.endsWith(".html")) {
-				var pattern = /(https?:\/\/tools\.dillerm\.io\/lib\/[^?]+)\?version=([^"]+)/g;
 				var text = fs.readFileSync(filename, { encoding: "utf8" });
-				if (text.search(pattern)) {
+				var textAfter = libVersionTemplateFill(text);
+				if (text != textAfter) {
 					console.log(`] Fixing version for ${filename}`);
-					text = text.replace(pattern, `$1?version=${LIB_PROJECT_VERSION}`);
-					fs.writeFileSync(filename, text);
+					fs.writeFileSync(filename, textAfter);
 				}
 			}
 		};
@@ -296,7 +306,7 @@ app.get("/", asyncHandler(async (req, res) => {
 		var project_info_text = JSON.stringify(projects);
 		html = html.replace(pattern, `var projects = ${project_info_text}`)
 	}
-
+	html = libVersionTemplateFill(html);
 
 	res.status(200);
 	res.setHeader("Content-Type", "text/html");

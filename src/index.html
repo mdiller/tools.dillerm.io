@@ -12,7 +12,6 @@
 <body>
 <div id="navbar"></div>
 <div id="content" class="dillerm dillerm-content">
-	<h1>Web Tools</h1>
 	<div
 		class="project-box dillerm-card"
 		v-for="project in projects">
@@ -30,6 +29,7 @@
 
 <script>
 DillermWebUtils.init("#navbar", {
+	title: "Web Tools",
 	github_url: "https://github.com/mdiller/tools.dillerm.io"
 });
 
@@ -49,11 +49,6 @@ app.mount("#content");
 </script>
 
 <style>
-
-h1 {
-	margin-top: 0px;
-	margin-bottom: 35px;
-}
 
 .project-box {
 	position: relative;
