@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const util = require("util");
 const shell = require("shelljs");
+const cors = require("cors");
 
 // promisified fs stuff
 const fs_readdir = util.promisify(fs.readdir);
@@ -255,11 +256,11 @@ app.post("/githook", asyncHandler(async (req, res) => {
 	res.send("Done!");
 }));
 
-app.get("/lib/:filename(*)", asyncHandler(async (req, res) => {
-	var approved_subpaths = [ "images" ];
+app.get("/lib/:filename(*)", cors(), asyncHandler(async (req, res) => {
+	var approved_subpaths = [ "images", "fonts/worksans", "fonts/fontawesome" ];
 	var filename = req.params.filename;
-	
-	var valid_pattern = new RegExp(`^((${approved_subpaths.join("|")})/)?[0-1a-zA-Z-_.]+$`);
+
+	var valid_pattern = new RegExp(`^((${approved_subpaths.join("|")})/)?[0-9a-zA-Z-_.]+$`);
 	if (!filename.match(valid_pattern)) {
 		res.status(404);
 		res.setHeader("Content-Type", "text/html");
