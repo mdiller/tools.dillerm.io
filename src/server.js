@@ -152,7 +152,7 @@ async function updateProjectBuild(project) {
 	
 	if (fs.existsSync(project_dir + "/package.json")) {
 		console.log(`] installing packages...`);
-		if (!shellExecSync(`npm install --silent`, project_dir)) {
+		if (!shellExecSync(`npm install --silent --no-save`, project_dir)) {
 			return null; // nothing more to do if this fails
 		}
 	
